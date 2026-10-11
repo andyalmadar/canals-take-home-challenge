@@ -10,6 +10,7 @@
 .mypy_cache
 .ruff_cache
 tests
-deploy
+deploy/cloudrun.sh
+deploy/teardown.sh
 docker-compose.yml
 Makefile

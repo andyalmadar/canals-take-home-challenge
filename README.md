@@ -278,10 +278,12 @@ make run                     # uvicorn --reload on :8000
 make check                   # ruff, mypy --strict, pytest
 ```
 
-Tests run against a real Postgres (`TEST_DATABASE_URL`, default
-`postgresql+asyncpg://orders:orders@localhost:5432/orders_test`); create that database once with
-`createdb orders_test` or via compose. Migrations are applied once per session and every test
-starts from freshly seeded data. CI (GitHub Actions) runs lint, type-check, `alembic check`,
+Tests run against a real Postgres, never the development database: they connect to
+`TEST_DATABASE_URL` (default `postgresql+asyncpg://orders:orders@localhost:5432/orders_test`)
+and truncate every table before each test. The compose Postgres creates `orders_test` on first
+boot via `deploy/postgres-init/`; if you already have a volume from before that script existed,
+run `docker compose down -v` once or `docker compose exec db createdb -U orders orders_test`.
+Migrations are applied once per session and every test starts from freshly seeded data. CI (GitHub Actions) runs lint, type-check, `alembic check`,
 the tests against a Postgres service container, and a Docker image build.
 
 ### Layout
@@ -305,7 +307,7 @@ app/
 alembic/               migrations (0001 creates the schema)
 scripts/seed.py        idempotent reference data
 tests/                 integration tests against Postgres
-deploy/                Cloud Run provisioning
+deploy/                Cloud Run provisioning, compose Postgres init script
 ```
 
 ---
