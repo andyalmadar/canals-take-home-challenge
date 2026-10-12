@@ -35,6 +35,22 @@ IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:${GIT_SHA}"
 
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 
+# IAM is eventually consistent: a service account created a moment ago can be
+# invisible to other services for several seconds. Retry with backoff.
+retry() {
+  local attempt=1 max=8 delay=3
+  until "$@"; do
+    if (( attempt >= max )); then
+      echo "command failed after $max attempts: $*" >&2
+      return 1
+    fi
+    echo "   (attempt $attempt failed, retrying in ${delay}s...)"
+    sleep "$delay"
+    attempt=$((attempt + 1))
+    delay=$((delay * 2 > 30 ? 30 : delay * 2))
+  done
+}
+
 gcloud config set project "$PROJECT_ID" >/dev/null
 
 log "Enabling APIs"
@@ -73,10 +89,10 @@ fi
 log "Service account: $SA"
 gcloud iam service-accounts describe "$SA" >/dev/null 2>&1 ||
   gcloud iam service-accounts create "$SA_NAME" --display-name "Orders API runtime"
-gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$SA" \
-  --role roles/cloudsql.client --condition None >/dev/null
-gcloud secrets add-iam-policy-binding "$SECRET" --member "serviceAccount:$SA" \
-  --role roles/secretmanager.secretAccessor >/dev/null
+retry gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$SA" \
+  --role roles/cloudsql.client --condition None --quiet >/dev/null
+retry gcloud secrets add-iam-policy-binding "$SECRET" --member "serviceAccount:$SA" \
+  --role roles/secretmanager.secretAccessor --quiet >/dev/null
 
 log "Building image: $IMAGE"
 gcloud builds submit --tag "$IMAGE" --quiet .
