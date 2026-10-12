@@ -20,6 +20,15 @@ docker compose up --build
 That starts Postgres, applies migrations, loads seed data and serves the API on
 <http://localhost:8000> (interactive docs at `/docs`).
 
+Already running Postgres on 5432? Point the compose database at another host port:
+
+```bash
+POSTGRES_HOST_PORT=5433 docker compose up --build
+```
+
+(`API_HOST_PORT` does the same for the API; tests then need
+`TEST_DATABASE_URL=postgresql+asyncpg://orders:orders@localhost:5433/orders_test`.)
+
 Place an order from San Francisco. Both products are in stock in Los Angeles, the nearest
 warehouse, so that is where it is filled:
 
