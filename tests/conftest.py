@@ -55,7 +55,22 @@ def settings() -> Settings:
 @pytest.fixture(scope="session", autouse=True)
 def migrated_database(settings: Settings) -> None:
     env = {**os.environ, "DATABASE_URL": settings.database_url}
-    subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True, env=env)
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        pytest.exit(
+            "Could not migrate the test database.\n"
+            f"  TEST_DATABASE_URL = {settings.database_url}\n"
+            "  Is Postgres running there with the `orders` role and `orders_test` database?\n"
+            "  If compose runs on another port, set TEST_DATABASE_URL accordingly, e.g.\n"
+            "  TEST_DATABASE_URL=postgresql+asyncpg://orders:orders@localhost:5433/orders_test\n\n"
+            f"alembic output:\n{result.stderr.strip()}",
+            returncode=1,
+        )
 
 
 @pytest.fixture(scope="session")
