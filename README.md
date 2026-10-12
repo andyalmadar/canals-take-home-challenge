@@ -20,14 +20,14 @@ docker compose up --build
 That starts Postgres, applies migrations, loads seed data and serves the API on
 <http://localhost:8000> (interactive docs at `/docs`).
 
-Already running Postgres on 5432? Point the compose database at another host port:
+Already running Postgres on 5432? Put the compose database on another host port:
 
 ```bash
 POSTGRES_HOST_PORT=5433 docker compose up --build
 ```
 
-(`API_HOST_PORT` does the same for the API; tests then need
-`TEST_DATABASE_URL=postgresql+asyncpg://orders:orders@localhost:5433/orders_test`.)
+`API_HOST_PORT` does the same for the API. If you change the database port, the test suite
+needs to know too; see [Running the tests](#running-the-tests).
 
 Place an order from San Francisco. Both products are in stock in Los Angeles, the nearest
 warehouse, so that is where it is filled:
@@ -287,13 +287,38 @@ make run                     # uvicorn --reload on :8000
 make check                   # ruff, mypy --strict, pytest
 ```
 
-Tests run against a real Postgres, never the development database: they connect to
-`TEST_DATABASE_URL` (default `postgresql+asyncpg://orders:orders@localhost:5432/orders_test`)
-and truncate every table before each test. The compose Postgres creates `orders_test` on first
-boot via `deploy/postgres-init/`; if you already have a volume from before that script existed,
-run `docker compose down -v` once or `docker compose exec db createdb -U orders orders_test`.
-Migrations are applied once per session and every test starts from freshly seeded data. CI (GitHub Actions) runs lint, type-check, `alembic check`,
-the tests against a Postgres service container, and a Docker image build.
+### Running the tests
+
+The tests are integration tests against a real Postgres. They use a **separate database**,
+`orders_test`, and truncate every table before each test, so they never touch the data the
+API is serving.
+
+With the compose stack running on the default port, this is all it takes:
+
+```bash
+make test
+```
+
+If you started compose with `POSTGRES_HOST_PORT=5433` (or any port other than 5432), tell
+the tests where the database is:
+
+```bash
+TEST_DATABASE_URL=postgresql+asyncpg://orders:orders@localhost:5433/orders_test make test
+```
+
+A wrong URL fails fast with a message that repeats this hint, rather than 33 red tests.
+
+How the suite is wired:
+
+| Setting | Default | Notes |
+|---|---|---|
+| `TEST_DATABASE_URL` | `postgresql+asyncpg://orders:orders@localhost:5432/orders_test` | Only env var the tests read. |
+| `orders_test` database | created by compose on first boot (`deploy/postgres-init/`) | On a volume older than that script: `docker compose exec db createdb -U orders orders_test`. |
+| Schema | `alembic upgrade head`, once per session | Same migrations as production. |
+| Data | truncated and re-seeded before every test | Same seed as `make seed`. |
+
+CI (GitHub Actions) runs lint, type-check, `alembic check`, the tests against a Postgres
+service container, and a Docker image build on every push.
 
 ### Layout
 
