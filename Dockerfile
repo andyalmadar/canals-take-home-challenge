@@ -1,26 +1,26 @@
-# syntax=docker/dockerfile:1.7
 # ---- build stage: resolve and install dependencies into a venv ---------------
 FROM python:3.13-slim AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /bin/
 
+# No BuildKit cache mounts: Cloud Build's default builder does not support
+# them, and plain layer caching already covers the dependency install.
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON_DOWNLOADS=0
+    UV_PYTHON_DOWNLOADS=0 \
+    UV_NO_CACHE=1
 
 WORKDIR /app
 
 # Dependencies first so this layer is cached across source-only changes.
 COPY pyproject.toml uv.lock README.md ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
 COPY scripts ./scripts
 COPY alembic ./alembic
 COPY alembic.ini ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev
 
 # ---- runtime stage: minimal image, non-root user -----------------------------
 FROM python:3.13-slim AS runtime
