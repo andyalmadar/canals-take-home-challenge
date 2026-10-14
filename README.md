@@ -9,6 +9,10 @@ returns the order. Geocoding and payments are behind interfaces with mock implem
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2 (async) · asyncpg · Alembic · Pydantic v2 ·
 PostgreSQL 16 · structlog · uv · Docker · Cloud Run + Cloud SQL
 
+**Live demo:** <https://orders-api-520207884704.us-central1.run.app/docs> (Cloud Run, scale-to-zero,
+so the first request after idle takes a few seconds). The curl examples below work against it by
+replacing `localhost:8000` with that host.
+
 ---
 
 ## Quickstart
