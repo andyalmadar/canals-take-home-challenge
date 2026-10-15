@@ -44,4 +44,10 @@ test: ## Run tests (expects TEST_DATABASE_URL or local Postgres on 5432)
 
 check: lint typecheck test ## Everything CI runs
 
-.PHONY: help up down reset install run migrate revision seed lint fmt typecheck test check
+.PHONY: help up down reset install run migrate revision seed lint fmt typecheck test check loadtest loadtest-contention
+
+loadtest: ## Concurrency + throughput check against a running API (URL, DB override-able)
+	$(UV) run python -m scripts.loadtest --url $(or $(URL),http://localhost:8000) --requests 300 --concurrency 50 --mixed-cards $(if $(DB),--database-url $(DB),)
+
+loadtest-contention: ## 200 orders race for 5 units; proves no oversell (needs DB)
+	$(UV) run python -m scripts.loadtest --url $(or $(URL),http://localhost:8000) --scenario contention --stock 5 --requests 200 --concurrency 100 --database-url $(or $(DB),postgresql+asyncpg://orders:orders@localhost:5432/orders)

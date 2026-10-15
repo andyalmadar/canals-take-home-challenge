@@ -261,6 +261,55 @@ scaling across containers.
 
 ---
 
+## Load and contention testing
+
+"Production rigor" for an order endpoint means stock is never oversold, retries never double-
+charge, and overload degrades into clean rejections rather than 5xx responses, deadlocks or hung
+connections. `scripts/loadtest.py` checks exactly that against any running instance. It fires
+N concurrent orders, reports status counts and latency percentiles, and when given a database
+URL it snapshots inventory before and after and verifies the invariants arithmetically.
+
+```bash
+# ample stock, distinct keys, 10% declines + 10% gateway timeouts mixed in
+make loadtest DB=postgresql+asyncpg://orders:orders@localhost:5432/orders
+
+# 200 orders race for 5 units: exactly 5 may win, everyone else gets a clean 409
+make loadtest-contention
+
+# every request reuses ONE Idempotency-Key: exactly one order may exist
+uv run python -m scripts.loadtest --requests 100 --concurrency 100 --duplicate-keys \
+  --database-url postgresql+asyncpg://orders:orders@localhost:5432/orders
+
+# against Cloud Run (no DB access from outside, so latency and status mix only)
+uv run python -m scripts.loadtest --url https://orders-api-520207884704.us-central1.run.app \
+  --requests 200 --concurrency 20
+```
+
+Sample results from a 4-vCPU container running the API, Postgres **and** the load generator
+together (so absolute latency is pessimistic; the invariants are what matter):
+
+| Scenario | Requests / concurrency | Outcome | Invariants |
+|---|---|---|---|
+| Throughput, mixed cards | 300 / 50 | 240 paid, 30 declined, 30 unknown; 41 rps; p50 1.1s, p99 2.3s | stock 430 → 160, exactly the 270 units held by paid+unknown orders |
+| Contention | 500 / 200 for 3 units | 3 paid, 497 × 409 | stock 3 → 0, no 5xx, no deadlocks |
+| Duplicate key | 100 / 100, one key | 1 paid, 99 × 409 (in progress) | one order, one charge, one unit reserved |
+| Exhaustion | 1000 / 100 for 160 units | 160 paid, 840 × 409 | stock 160 → 0 |
+
+The throughput run also shows the fall-through working: Los Angeles drained to zero and the
+next-nearest warehouse (Dallas) absorbed the remaining orders without any request failing.
+
+What the numbers do and do not say: the service is a single uvicorn worker per container and
+every order performs several short transactions plus the (mocked) payment call, so per-instance
+throughput is CPU-bound in the tens of requests per second. Scaling is horizontal (more Cloud
+Run instances, each with a small pool) and the connection budget is `DB_POOL_SIZE +
+DB_MAX_OVERFLOW` per instance × instances, which must stay below the database's
+`max_connections`. The smallest Cloud SQL tier allows about 25, which is why the deploy script
+caps instances at 4 with a pool of 4. A real high-traffic deployment would put PgBouncer in
+front of Postgres, move the payment call out of the request path (reserve, enqueue, settle
+asynchronously), and add read replicas for order lookups.
+
+---
+
 ## Deploy to Cloud Run
 
 Requires the `gcloud` CLI authenticated against a project with billing enabled.
@@ -344,6 +393,7 @@ app/
   db/                  models, session factory
 alembic/               migrations (0001 creates the schema)
 scripts/seed.py        idempotent reference data
+scripts/loadtest.py    concurrency / throughput check with inventory invariants
 tests/                 integration tests against Postgres
 deploy/                Cloud Run provisioning, compose Postgres init script
 ```
