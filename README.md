@@ -9,9 +9,10 @@ returns the order. Geocoding and payments are behind interfaces with mock implem
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2 (async) · asyncpg · Alembic · Pydantic v2 ·
 PostgreSQL 16 · structlog · uv · Docker · Cloud Run + Cloud SQL
 
-**Live demo:** <https://orders-api-520207884704.us-central1.run.app/docs> (Cloud Run, scale-to-zero,
-so the first request after idle takes a few seconds). The curl examples below work against it by
-replacing `localhost:8000` with that host.
+**Deployed instance:** <https://orders-api-520207884704.us-central1.run.app> on Cloud Run, with
+interactive OpenAPI docs at [`/docs`](https://orders-api-520207884704.us-central1.run.app/docs).
+It scales to zero, so the first request after idle takes a few seconds. The curl examples below
+work against it by replacing `localhost:8000` with that host.
 
 ---
 
@@ -280,7 +281,7 @@ make loadtest-contention
 uv run python -m scripts.loadtest --requests 100 --concurrency 100 --duplicate-keys \
   --database-url postgresql+asyncpg://orders:orders@localhost:5432/orders
 
-# against Cloud Run (no DB access from outside, so latency and status mix only)
+# against the deployed instance (no DB access from outside, so latency and status mix only)
 uv run python -m scripts.loadtest --url https://orders-api-520207884704.us-central1.run.app \
   --requests 200 --concurrency 20
 ```
